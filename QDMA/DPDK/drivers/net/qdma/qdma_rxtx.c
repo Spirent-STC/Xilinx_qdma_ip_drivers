@@ -1057,7 +1057,7 @@ uint16_t qdma_recv_pkts_mm(struct qdma_rx_queue *rxq,
 #endif
 
 	if (rxq->status != RTE_ETH_QUEUE_STATE_STARTED) {
-        PMD_DRV_LOG(ERR, "recv not started on rx queue-id :%d, on tail index:%d\n", rxq->queue_id, id);
+        PMD_DRV_LOG(ERR, "recv not started on rx queue-id :%d\n", rxq->queue_id);
 		return 0;
     }
 

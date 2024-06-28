@@ -293,6 +293,21 @@ struct rte_pmd_qdma_dev_attributes {
 	enum rte_pmd_qdma_ip_type ip_type;
 };
 
+/******************************************************************************/
+/**
+ * Dumps the QDMA compl ring
+ *
+ * @param	port_id Port ID
+ * @param   queue   queue index
+ * @param   start   start index
+ * @param   end     last index
+ *
+ * @return	'0' on success and "< 0" on failure
+ *
+ * @note	None
+ * @ingroup rte_pmd_qdma_func
+ ******************************************************************************/
+int rte_pmd_qdma_dbg_rx_ctxt(uint8_t port_id, uint16_t queue, int start, int end);
 
 /******************************************************************************/
 /**
@@ -881,6 +896,9 @@ struct rte_device *rte_pmd_qdma_get_device(int port_id);
  *
  ******************************************************************************/
 bool rte_pmd_qdma_validate_dev(int port_id);
+
+
+
 
 #ifdef __cplusplus
 }
