@@ -3932,7 +3932,7 @@ static int eqdma_cpm5_cmpt_context_read(void *dev_hndl, uint16_t hw_qid,
 	ctxt->sh_cmpt = (uint8_t)FIELD_GET(CMPL_CTXT_DATA_W5_SH_CMPT_MASK,
 			cmpt_ctxt[5]);
 #ifdef RTE_LIBRTE_SPIRENT
-    ctxt->port_id = (uint8_t)FIELD_GET(CMPL_CTXT_DATA_W5_PORT_ID_MASK,
+	ctxt->port_id = (uint8_t)FIELD_GET(CMPL_CTXT_DATA_W5_PORT_ID_MASK,
 			cmpt_ctxt[5]);
 #endif
 
