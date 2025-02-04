@@ -1598,6 +1598,7 @@ int qdma_dev_rx_queue_start(struct rte_eth_dev *dev, uint16_t qid)
 #ifdef RTE_LIBRTE_SPIRENT
 		q_prefetch_ctxt.port_id = qid;
 		q_sw_ctxt.port_id = qid;
+		q_cmpt_ctxt.port_id = qid;
 
 		// Turn on interrupts for the UIO driver
 		q_cmpt_ctxt.en_int = 1;
