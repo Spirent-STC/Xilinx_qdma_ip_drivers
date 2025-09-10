@@ -42,6 +42,8 @@
  * @brief	QDMA character device call back data
  */
 struct qdma_cdev_cb {
+	/** to be able to add to the phy_dev list of cb's */
+	struct list_head list_head;
 	/** pointer to xilinx pcie device */
 	struct xlnx_pci_dev *xpdev;
 	/** character device lock  */
@@ -50,6 +52,8 @@ struct qdma_cdev_cb {
 	int cdev_major;
 	/** character device minor number count  */
 	int cdev_minor_cnt;
+    /** character device starting minor number */
+    int cdev_minor_start;
 };
 
 /**

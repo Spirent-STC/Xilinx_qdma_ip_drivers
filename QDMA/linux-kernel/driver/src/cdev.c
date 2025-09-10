@@ -52,6 +52,9 @@ struct xlnx_phy_dev {
 	unsigned int major;	/**< major number per board */
 	unsigned int device_bus;	/**< PCIe device bus number per board */
 	unsigned int dma_device_index;
+
+    struct list_head xcbs; /**< list of cb's belonging to this physical device */
+
 };
 
 static LIST_HEAD(xlnx_phy_dev_list);
@@ -101,8 +104,28 @@ static inline void xlnx_phy_dev_list_add(struct xlnx_phy_dev *phy_dev)
 	mutex_unlock(&xlnx_phy_dev_mutex);
 }
 
+static inline void xlnx_phy_dev_add_cb(struct qdma_cdev_cb *xcdev, struct xlnx_phy_dev *phy_dev)
+{
+	if (!phy_dev || !xcdev)
+		return;
+
+	mutex_lock(&xlnx_phy_dev_mutex);
+	list_add_tail(&xcdev->list_head, &phy_dev->xcbs);
+	mutex_unlock(&xlnx_phy_dev_mutex);
+}
+
+static inline void xlnx_phy_dev_remove_cb(struct qdma_cdev_cb *xcdev)
+{
+	if (!xcdev)
+		return;
+
+	mutex_lock(&xlnx_phy_dev_mutex);
+	list_del(&xcdev->list_head);
+	mutex_unlock(&xlnx_phy_dev_mutex);
+}
+
 static int qdma_req_completed(struct qdma_request *req,
-		       unsigned int bytes_done, int err)
+			   unsigned int bytes_done, int err)
 {
 	struct qdma_io_cb *qiocb = container_of(req,
 						struct qdma_io_cb,
@@ -478,7 +501,7 @@ static ssize_t cdev_aio_write(struct kiocb *iocb, const struct iovec *io,
 		caio->req_count = i;
 		qhndl = xcdev->h2c_qhndl;
 		rv = xcdev->fp_aiorw(xcdev->xcb->xpdev->dev_hndl, qhndl,
-				     caio->req_count, caio->reqv);
+					 caio->req_count, caio->reqv);
 		if (rv >= 0)
 			rv = -EIOCBQUEUED;
 	} else {
@@ -552,7 +575,7 @@ static ssize_t cdev_aio_read(struct kiocb *iocb, const struct iovec *io,
 		caio->req_count = i;
 		qhndl = xcdev->c2h_qhndl;
 		rv = xcdev->fp_aiorw(xcdev->xcb->xpdev->dev_hndl, qhndl,
-				     caio->req_count, caio->reqv);
+					 caio->req_count, caio->reqv);
 		if (rv >= 0)
 			rv = -EIOCBQUEUED;
 	} else {
@@ -638,7 +661,7 @@ int qdma_cdev_create(struct qdma_cdev_cb *xcb, struct pci_dev *pdev,
 			GFP_KERNEL);
 	if (!xcdev) {
 		pr_err("%s failed to allocate cdev %lu.\n",
-		       qconf->name, sizeof(struct qdma_cdev));
+			   qconf->name, sizeof(struct qdma_cdev));
 		if (ebuf && ebuflen) {
 			rv = snprintf(ebuf, ebuflen,
 				"%s failed to allocate cdev %lu.\n",
@@ -722,10 +745,41 @@ err_out:
  */
 void qdma_cdev_device_cleanup(struct qdma_cdev_cb *xcb)
 {
+    dev_t dev = MKDEV(xcb->cdev_major, xcb->cdev_minor_start);
+	struct xlnx_phy_dev *phy_dev, *tmp;
+    struct qdma_cdev_cb *cb_entry, *cb_tmp;
+	struct xlnx_dma_dev *xdev = (struct xlnx_dma_dev *)xcb->xpdev->dev_hndl;
+    int found = 0;
+
 	if (!xcb->cdev_major)
 		return;
 
-	xcb->cdev_major = 0;
+	list_for_each_entry_safe(phy_dev, tmp, &xlnx_phy_dev_list, list_head) {
+        list_for_each_entry_safe(cb_entry, cb_tmp, &phy_dev->xcbs, list_head) {
+            if (cb_entry == xcb) {
+                found = 1;
+                break;
+            }
+        }
+
+        if (found) {
+            break;
+        }
+    }
+
+    if (!found) {
+        pr_err("uh oh! couldn't find the phy_dev for this xcb\n");
+        return;
+    }
+
+    xlnx_phy_dev_remove_cb(xcb);
+
+    if (list_empty(&phy_dev->xcbs)) {
+        pr_info("removing the last xcb, unallocating chrdevs\n");
+        unregister_chrdev_region(dev, xcb->cdev_minor_cnt);
+        phy_dev->major = 0;
+    }
+
 }
 
 int qdma_cdev_device_init(struct qdma_cdev_cb *xcb)
@@ -749,10 +803,23 @@ int qdma_cdev_device_init(struct qdma_cdev_cb *xcb)
 	 */
 	mutex_lock(&xlnx_phy_dev_mutex);
 	xdev = (struct xlnx_dma_dev *)xcb->xpdev->dev_hndl;
+
 	list_for_each_entry_safe(phy_dev, tmp, &xlnx_phy_dev_list, list_head) {
 		if (phy_dev->device_bus == xcb->xpdev->pdev->bus->number &&
 			phy_dev->dma_device_index == xdev->dma_device_index) {
+			if (!phy_dev->major) {
+				/* allocate a dynamically allocated char device node */
+				rv = alloc_chrdev_region(&dev, 0, xcb->cdev_minor_cnt,
+						QDMA_CDEV_CLASS_NAME);
+				if (rv) {
+					pr_err("unable to allocate cdev region %d.\n", rv);
+					reeturn rv;
+				}
+				phy_dev->major = MAJOR(dev);
+			}
+
 			xcb->cdev_major = phy_dev->major;
+            xlnx_phy_dev_add_cb(xcb, phy_dev);
 			mutex_unlock(&xlnx_phy_dev_mutex);
 			return 0;
 		}
@@ -767,6 +834,7 @@ int qdma_cdev_device_init(struct qdma_cdev_cb *xcb)
 		return rv;
 	}
 	xcb->cdev_major = MAJOR(dev);
+    xcb->cdev_minor_start = MINOR(dev);
 
 	new_phy_dev = kzalloc(sizeof(struct xlnx_phy_dev), GFP_KERNEL);
 	if (!new_phy_dev) {
@@ -774,9 +842,11 @@ int qdma_cdev_device_init(struct qdma_cdev_cb *xcb)
 		return -ENOMEM;
 	}
 
+    INIT_LIST_HEAD(&new_phy_dev->xcbs);
 	new_phy_dev->major = xcb->cdev_major;
 	new_phy_dev->device_bus = xcb->xpdev->pdev->bus->number;
 	new_phy_dev->dma_device_index = xdev->dma_device_index;
+    xlnx_phy_dev_add_cb(xcb, new_phy_dev);
 	xlnx_phy_dev_list_add(new_phy_dev);
 
 	return 0;
@@ -817,7 +887,9 @@ void qdma_cdev_cleanup(void)
 {
 	struct xlnx_phy_dev *phy_dev, *tmp;
 
+    pr_err("calling qdma_cdev_cleanup\n");
 	list_for_each_entry_safe(phy_dev, tmp, &xlnx_phy_dev_list, list_head) {
+    pr_err("calling unregitser_chrdev_region\n");
 		unregister_chrdev_region(MKDEV(phy_dev->major, 0),
 				QDMA_MINOR_MAX);
 		xlnx_phy_dev_list_remove(phy_dev);
