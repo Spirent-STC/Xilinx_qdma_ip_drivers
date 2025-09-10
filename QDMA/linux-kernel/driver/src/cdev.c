@@ -748,7 +748,6 @@ void qdma_cdev_device_cleanup(struct qdma_cdev_cb *xcb)
     dev_t dev = MKDEV(xcb->cdev_major, xcb->cdev_minor_start);
 	struct xlnx_phy_dev *phy_dev, *tmp;
     struct qdma_cdev_cb *cb_entry, *cb_tmp;
-	struct xlnx_dma_dev *xdev = (struct xlnx_dma_dev *)xcb->xpdev->dev_hndl;
     int found = 0;
 
 	if (!xcb->cdev_major)
@@ -813,7 +812,7 @@ int qdma_cdev_device_init(struct qdma_cdev_cb *xcb)
 						QDMA_CDEV_CLASS_NAME);
 				if (rv) {
 					pr_err("unable to allocate cdev region %d.\n", rv);
-					reeturn rv;
+					return rv;
 				}
 				phy_dev->major = MAJOR(dev);
 			}
