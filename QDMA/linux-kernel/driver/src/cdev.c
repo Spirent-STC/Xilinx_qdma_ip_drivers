@@ -886,9 +886,8 @@ void qdma_cdev_cleanup(void)
 {
 	struct xlnx_phy_dev *phy_dev, *tmp;
 
-    pr_err("calling qdma_cdev_cleanup\n");
+
 	list_for_each_entry_safe(phy_dev, tmp, &xlnx_phy_dev_list, list_head) {
-    pr_err("calling unregitser_chrdev_region\n");
 		unregister_chrdev_region(MKDEV(phy_dev->major, 0),
 				QDMA_MINOR_MAX);
 		xlnx_phy_dev_list_remove(phy_dev);
