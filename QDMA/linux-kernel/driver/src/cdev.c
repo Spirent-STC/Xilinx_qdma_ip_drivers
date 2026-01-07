@@ -818,6 +818,7 @@ int qdma_cdev_device_init(struct qdma_cdev_cb *xcb)
 			}
 
 			xcb->cdev_major = phy_dev->major;
+            xcb->cdev_minor_start = MINOR(dev);
             xlnx_phy_dev_add_cb(xcb, phy_dev);
 			mutex_unlock(&xlnx_phy_dev_mutex);
 			return 0;
